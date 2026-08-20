@@ -122,10 +122,35 @@ h3:first-child{margin-top:0}
 #hWarn{position:absolute;top:36%;left:0;right:0;text-align:center;font-size:14px;font-weight:700;
   color:var(--dan);text-shadow:0 2px 12px #000;opacity:0;transition:opacity .2s}
 #hWarn.on{opacity:1}
-#hAbil{position:absolute;left:calc(18px + env(safe-area-inset-left));
-  bottom:calc(26px + env(safe-area-inset-bottom));font-size:10.5px;color:var(--dim);
-  background:rgba(14,20,29,.88);border:1px solid var(--line);border-radius:9px;padding:6px 10px}
-#hAbil b{color:var(--ac);display:block;font-size:11.5px}
+#hAbil{position:absolute;left:calc(14px + env(safe-area-inset-left));
+  bottom:calc(122px + env(safe-area-inset-bottom));font-size:10px;color:var(--dim);
+  background:rgba(14,20,29,.88);border:1px solid var(--line);border-radius:9px;padding:5px 9px}
+#hAbil b{color:var(--ac);display:block;font-size:11px}
+
+/* Minimappa */
+#hMap{position:absolute;left:calc(14px + env(safe-area-inset-left));
+  bottom:calc(26px + env(safe-area-inset-bottom));width:88px;height:88px;
+  border-radius:50%;background:rgba(10,14,19,.8);border:1px solid var(--line)}
+
+/* Barra dell'energia del boost */
+#hEnWrap{position:absolute;right:calc(18px + env(safe-area-inset-right));
+  bottom:calc(116px + env(safe-area-inset-bottom));width:86px;height:6px;
+  background:rgba(10,14,19,.85);border:1px solid var(--line);border-radius:99px;overflow:hidden}
+#hEn{height:100%;width:100%;background:var(--ac);border-radius:99px;transition:background .2s}
+#hEnWrap.low #hEn{background:var(--dan)}
+body.desktop #hEnWrap{right:18px;bottom:22px;width:120px;height:7px}
+
+/* Kill feed */
+#hFeed{position:absolute;top:calc(64px + env(safe-area-inset-top));left:0;right:0;
+  text-align:center;font-size:11.5px;line-height:1.8;pointer-events:none}
+#hFeed div{display:inline-block;background:rgba(14,20,29,.85);border:1px solid var(--line);
+  border-radius:7px;padding:2px 9px;margin:1px}
+#hFeed b{color:var(--ac)} #hFeed i{font-style:normal;color:var(--dan)}
+
+/* Stato della zona */
+#hZone{position:absolute;top:calc(44px + env(safe-area-inset-top));left:0;right:0;
+  text-align:center;font-size:11px;font-weight:700;color:var(--dim);letter-spacing:.3px}
+#hZone.hot{color:var(--dan)}
 #hBoost{position:absolute;right:calc(18px + env(safe-area-inset-right));
   bottom:calc(22px + env(safe-area-inset-bottom));width:86px;height:86px;border-radius:50%;
   background:rgba(45,212,191,.12);border:2px solid rgba(45,212,191,.45);pointer-events:auto;
@@ -214,11 +239,15 @@ body.desktop #hBoost{display:none}
     </div>
     <div class="htr"><div class="chip"><small>In vita</small><span id="hAlive">10</span></div></div>
     <div id="hBoard"></div>
+    <div id="hZone"></div>
+    <div id="hFeed"></div>
     <div id="hWarn">⚠ FUORI DALLA ZONA</div>
     <div id="hHint" style="position:absolute;top:52%;left:0;right:0;text-align:center;
       font-size:13px;font-weight:600;color:var(--dim);opacity:0;transition:opacity .4s">
-      Trascina il dito in qualsiasi punto per guidare</div>
+      Trascina il dito per guidare · doppio tocco per il boost</div>
     <div id="hAbil"></div>
+    <canvas id="hMap"></canvas>
+    <div id="hEnWrap"><div id="hEn"></div></div>
     <div id="hBoost">BOOST</div>
   </div>
 </div>
@@ -296,8 +325,17 @@ const DEFS={
               mods:{leech:1.35,visible:1},
               d:'+35% massa assorbita dalle kill · sei visibile a tutti sulla mappa.'},
   ab_surge:  {cat:'ability',rar:'raro',  name:'Surge',   price:880,  dur:100,
-              mods:{boostCost:.6,boostMul:.92},
-              d:'Il boost costa il 40% in meno · ma spinge un po\' meno forte.'},
+              mods:{boostCost:.62,enRegen:1.5,boostMul:.94},
+              d:'L\'energia si ricarica del 50% più in fretta · ma il boost spinge un filo meno.'},
+  ab_magnete:{cat:'ability',rar:'raro',  name:'Magnete', price:1000, dur:100,
+              mods:{magnet:118,speed:.93},
+              d:'Attira il cibo da lontano: cresci molto più in fretta · −7% velocità.'},
+  ab_radar:  {cat:'ability',rar:'epico', name:'Radar',   price:2100, dur:100,
+              mods:{radar:1,visible:1},
+              d:'Vedi tutti sulla minimappa · ma anche loro vedono te.'},
+  ab_bozzolo:{cat:'ability',rar:'epico', name:'Bozzolo', price:2200, dur:100,
+              mods:{regen:2.4,growth:.8},
+              d:'Rigeneri massa restando lontano dagli altri · mangiando cresci il 20% meno.'},
 
   /* ── TALISMANI · economici, non toccano il gameplay ────────── */
   ch_fortuna:{cat:'charm',rar:'comune',name:'Talismano della Fortuna',price:350, dur:100,
@@ -340,7 +378,7 @@ function fresh(){
     risk:{date:0,count:0,flags:[]},
     withdrawals:[], deposits:[],
     stats:{played:0,wins:0,kills:0,deaths:0,bestMass:0,top3:0,earned:0,spent:0},
-    tickets:{date:0,left:3}
+    tickets:{date:0,left:3,bought:0}
   };
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){}}
@@ -359,7 +397,8 @@ const ACC={
   pSnk:'player:SNK', pCoin:'player:COINS',
   prize:'sys:prize', burn:'sys:burn', treas:'sys:treasury', ops:'sys:ops',
   crea:'sys:creators', resv:'sys:seasonReserve', emis:'sys:emission',
-  opp:'sys:opponents', ext:'sys:external', mkt:'sys:market'
+  opp:'sys:opponents', ext:'sys:external', mkt:'sys:market',
+  coinSink:'sys:coinsink'   // dove finiscono i Coins spesi (ticket, consumabili)
 };
 
 function bal(a){return DB.accounts[a]||0}
@@ -495,7 +534,8 @@ function equip(mode,id){
 /** Aggrega i modificatori del loadout. In ranked i Core vengono ignorati. */
 function loadoutMods(mode){
   const m={speed:1,radius:1,growth:1,startMass:1,leech:1,boostCost:1,boostMul:1,
-           shield:0,visible:0,earn:0,killEarn:0,placeEarn:0,fee:0,tickets:0,
+           enRegen:1,shield:0,visible:0,radar:0,magnet:R.magnet,regen:0,zoneRes:1,
+           earn:0,killEarn:0,placeEarn:0,fee:0,tickets:0,
            skin:'sk_verde',ability:null,used:[]};
   const L=DB.loadout[mode]||{};
   for(const cat in L){
@@ -508,7 +548,7 @@ function loadoutMods(mode){
     m.used.push(n.id);
     if(d.cat==='ability')m.ability=n.def;
     if(d.mods)for(const k in d.mods){
-      if(k==='shield'||k==='visible')m[k]=d.mods[k]; else m[k]*=d.mods[k];
+      if(SETMODS[k])m[k]=d.mods[k]; else m[k]*=d.mods[k];
     }
     if(d.eco)for(const k in d.eco)m[k]+=d.eco[k];
   }
@@ -666,30 +706,74 @@ function floorOf(cat){
 /* ═══════════════════════════════════════════════════════════════
    7 · MODALITÀ E MATCHMAKING
    ═══════════════════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────────────
+   LA MEMBRANA A SENSO UNICO
+   I Coins si guadagnano giocando (rubinetto libero) e non escono
+   MAI verso i $SNK. I $SNK possono diventare Coins, bruciandosi.
+   Se esistesse anche il percorso inverso, un bot potrebbe coltivare
+   Coins gratis e convertirli in valore reale: è così che sono morti
+   tutti i play-to-earn della generazione precedente.
+   ───────────────────────────────────────────────────────────── */
 const MODES={
-  free:  {key:'free',  name:'Allenamento', cur:'COINS', fee:0,   rake:0,   min:1,
-          d:'Gratis · premi in Coins · nessun rischio'},
-  t1:    {key:'t1',    name:'Ranked T1',   cur:'SNK',   fee:25,  rake:.10, min:1,
-          d:'Quota bassa · ideale per iniziare'},
-  t2:    {key:'t2',    name:'Ranked T2',   cur:'SNK',   fee:100, rake:.10, min:3,
+  free:  {key:'free',  name:'Allenamento', cur:'COINS', fee:0,   tk:0, rake:0,   min:1,
+          d:'Gratis, sempre · premi in Coins · nessun rischio'},
+  arena: {key:'arena', name:'Arena',       cur:'COINS', fee:0,   tk:1, rake:0,   min:1,
+          d:'Costa 1 Ticket · premi in Coins molto più alti'},
+  t1:    {key:'t1',    name:'Ranked T1',   cur:'SNK',   fee:25,  tk:0, rake:.10, min:2,
+          d:'Quota bassa in $SNK · qui si gioca per valore reale'},
+  t2:    {key:'t2',    name:'Ranked T2',   cur:'SNK',   fee:100, tk:0, rake:.10, min:4,
           d:'La fascia principale'},
-  t3:    {key:'t3',    name:'Ranked T3',   cur:'SNK',   fee:500, rake:.10, min:8,
+  t3:    {key:'t3',    name:'Ranked T3',   cur:'SNK',   fee:500, tk:0, rake:.10, min:8,
           d:'Alta posta · richiede livello 8 e stake'}
 };
-const isRanked=k=>k!=='free';
+const isRanked=k=>MODES[k].cur==='SNK';
+
+const TICKET_PRICE=600;      // in Coins
+const TICKET_FREE=3;         // gratuiti al giorno
+const TICKET_MAX=12;         // tetto giornaliero: chiude l'arbitraggio da bot
 
 function ticketsLeft(){
   const d=Math.floor(now()/DAY);
-  if(DB.tickets.date!==d){DB.tickets.date=d;DB.tickets.left=3+loadoutMods('ranked').tickets;save()}
+  if(DB.tickets.date!==d){
+    DB.tickets.date=d;
+    DB.tickets.left=TICKET_FREE+loadoutMods('ranked').tickets;
+    DB.tickets.bought=0; save();
+  }
   return DB.tickets.left;
+}
+function ticketCost(){
+  const n=DB.tickets.bought||0;
+  return Math.round(TICKET_PRICE*(1+n*0.35));   // prezzo crescente: altro freno al farming
+}
+function buyTicket(){
+  const c=ticketCost();
+  if((DB.tickets.bought||0)>=TICKET_MAX){toast('Hai raggiunto il tetto giornaliero di Ticket');return}
+  if(c>coins()){toast('Servono '+nf(c)+' ● Coins');return}
+  post('ticket_buy',null,[[ACC.pCoin,-c],[ACC.coinSink,c]]);
+  DB.tickets.bought=(DB.tickets.bought||0)+1;
+  DB.tickets.left++;
+  save(); toast('Ticket comprato per '+nf(c)+' ● Coins'); renderAll();
+}
+
+/** $SNK → Coins, senso unico. È un sink puro: i $SNK spesi si bruciano. */
+function convertToCoins(amtSnk){
+  if(amtSnk>snk()){toast('$SNK insufficienti');return}
+  const got=amtSnk*45;
+  post('convert_snk_coins',null,[[ACC.pSnk,-amtSnk],[ACC.burn,amtSnk],
+    [ACC.emis,-got],[ACC.pCoin,got]]);
+  DB.eco.burned+=amtSnk; DB.eco.sunk+=amtSnk; DB.eco.weekSink+=amtSnk;
+  save(); toast(nf(amtSnk)+' ◈ bruciati → '+nf(got)+' ● Coins'); renderAll();
 }
 
 function canPlay(k){
   const M=MODES[k];
   if(k==='free')return{ok:true};
+  if(M.tk){
+    if(ticketsLeft()<M.tk)return{ok:false,why:'Serve un Ticket',needTicket:true};
+    return{ok:true};
+  }
   if(DB.player.level<M.min)return{ok:false,why:'Serve il livello '+M.min};
   if(k==='t3'&&DB.player.stake<2000)return{ok:false,why:'Serve uno stake di 2.000 $SNK'};
-  if(ticketsLeft()>0&&k==='t1')return{ok:true,free:true};
   if(snk()<M.fee)return{ok:false,why:'Servono '+nf(M.fee)+' $SNK'};
   return{ok:true};
 }
@@ -702,8 +786,18 @@ function canPlay(k){
 const SPLIT={1:.45,2:.25,3:.15,4:.10,5:.05};
 const PLACE_SHARE=.6, KILL_SHARE=.4, MAX_ELIM=9;
 
+/** Premi in Coins: rubinetto libero, nessun montepremi da bilanciare. */
+const COIN_PAY={free:{base:150,place:38,kill:80},arena:{base:380,place:210,kill:190}};
+
 function computePayout(modeKey,place,kills,eco){
   const M=MODES[modeKey];
+  if(M.cur==='COINS'){
+    const c=COIN_PAY[modeKey]||COIN_PAY.free;
+    let p=Math.round(c.base+c.place*Math.max(0,11-place)*(place<=3?1.7:1));
+    let k=Math.round(c.kill*kills);
+    if(eco){p=Math.round(p*(1+eco.earn));k=Math.round(k*(1+eco.earn))}
+    return {place:p,kills:k,fee:0,pool:0,dist:0,cur:'COINS'};
+  }
   const pool=M.fee*10, dist=pool*(1-M.rake);
   let p=Math.round(dist*PLACE_SHARE*(SPLIT[place]||0));
   let k=Math.round(dist*KILL_SHARE/MAX_ELIM*kills);
@@ -712,7 +806,7 @@ function computePayout(modeKey,place,kills,eco){
     k=Math.round(k*(1+eco.killEarn));
     p=Math.round(p*(1+eco.earn)); k=Math.round(k*(1+eco.earn));
   }
-  return {place:p,kills:k,fee:M.fee,pool,dist};
+  return {place:p,kills:k,fee:M.fee,pool,dist,cur:'SNK'};
 }
 
 /** Rendimenti decrescenti oltre 25 partite/giorno — anti-bot §13 */
@@ -866,22 +960,32 @@ function rollWeek(){
 const R={
   players:10, world:2200, zoneStart:940, zoneEnd:110,
   grace:4, zoneDelay:12, zoneTime:150, zoneDps:3.2,
-  speed:116, boostMul:1.85, boostCost:5.5, turnRate:3.5,
+  speed:116, boostMul:1.95, boostCost:2.6, turnRate:3.5,
+  // Energia: il boost non è più infinito finché hai massa. Si scarica in
+  // ~2,5 s di spinta piena e si ricarica in ~5 s. Diventa una risorsa da
+  // dosare — quando spingere, e quando tenerne da parte per fuggire.
+  enMax:100, enDrain:40, enRegen:20, enUnlock:30,
+  magnet:34,              // raggio base di attrazione del cibo, per tutti
+  turnBoost:.82,          // in boost si sterza peggio: la velocità ha un prezzo
   startMass:10, minMass:6, pointGap:5, food:460, foodMass:1,
-  dropRatio:.62, tick:1/30, simVersion:'1.1.0'
+  dropRatio:.62, tick:1/30, simVersion:'2.0.0'
 };
 const NAMES=['Vipera','Kaito','Nova','Bruco','Zenit','Mamba','Yuki','Orbit','Tessa','Drago'];
 const BOTAB=['ab_viper','ab_bulwark','ab_wraith','ab_leech','ab_surge',null,null];
 const BOTSK=['sk_verde','sk_magma','sk_ghiacc','sk_giungla','sk_oro','sk_vuoto'];
 
 function baseMods(){return{speed:1,radius:1,growth:1,startMass:1,leech:1,boostCost:1,
-  boostMul:1,shield:0,visible:0,skin:'sk_verde'}}
+  boostMul:1,enRegen:1,shield:0,visible:0,radar:0,magnet:R.magnet,regen:0,
+  zoneRes:1,skin:'sk_verde'}}
+
+/** Questi modificatori si IMPOSTANO, non si moltiplicano. */
+const SETMODS={shield:1,visible:1,radar:1,magnet:1,regen:1};
 
 function applyDef(m,defId){
   if(!defId)return m;
   const d=DEFS[defId]; if(!d||!d.mods)return m;
   for(const k in d.mods){
-    if(k==='shield'||k==='visible')m[k]=d.mods[k]; else m[k]*=d.mods[k];
+    if(SETMODS[k])m[k]=d.mods[k]; else m[k]*=d.mods[k];
   }
   return m;
 }
@@ -912,7 +1016,7 @@ function createMatch(seed,pMods,mmr){
       x,y,ang:a+Math.PI/2+(rnd()-.5)*.5,
       mass:R.startMass*mod.startMass, maxMass:R.startMass*mod.startMass,
       path:[{x,y}],acc:0,alive:true,kills:0,placement:0,boosting:false,
-      mod, shieldT:0,
+      mod, shieldT:0, energy:R.enMax, lock:false, calm:0, killedBy:null,
       aggr:(.25+rnd()*.6)*(i===0?1:skill),
       react:(.55+rnd()*.5)*(i===0?1:skill),
       wob:rnd()*6.28,target:null
@@ -922,7 +1026,7 @@ function createMatch(seed,pMods,mmr){
   for(let i=0;i<R.food;i++)food.push(spawnFood(rnd,cx,cy,R.zoneStart));
   return {seed,rnd,cx,cy,snakes,food,t:0,zone:R.zoneStart,alive:R.players,
     input:{ang:snakes[0].ang,boost:false},finished:false,grid:new Map(),
-    tickN:0,log:[],lastIn:null};
+    tickN:0,log:[],lastIn:null,feed:[],flash:0};
 }
 
 function spawnFood(rnd,cx,cy,rad,x,y,m){
@@ -978,18 +1082,27 @@ function tick(m,dt){
 
     let want,boost=false;
     if(s.bot){const d=botThink(m,s);want=d.ang;boost=d.boost}
-    else{want=m.input.ang;boost=m.input.boost&&s.mass>R.minMass+2}
+    else{want=m.input.ang;boost=m.input.boost}
+
+    // ── Energia del boost ──────────────────────────────────
+    // A zero si blocca finché non risale sopra la soglia: impedisce di
+    // tenerlo premuto a raffica e crea un ritmo di spinta e recupero.
+    if(s.energy<=0)s.lock=true;
+    if(s.energy>=R.enUnlock)s.lock=false;
+    boost=boost&&!s.lock&&s.energy>0&&s.mass>R.minMass+2;
+    if(boost)s.energy=Math.max(0,s.energy-R.enDrain*s.mod.boostCost*dt);
+    else s.energy=Math.min(R.enMax,s.energy+R.enRegen*s.mod.enRegen*dt);
 
     let diff=want-s.ang;
     while(diff>Math.PI)diff-=Math.PI*2;
     while(diff<-Math.PI)diff+=Math.PI*2;
-    const mx=R.turnRate*dt;
+    const mx=R.turnRate*dt*(boost?R.turnBoost:1);
     s.ang+=clamp(diff,-mx,mx);
     s.boosting=boost;
 
     const sp=R.speed*s.mod.speed*(boost?R.boostMul*s.mod.boostMul:1);
     if(boost){
-      s.mass-=R.boostCost*s.mod.boostCost*dt;
+      s.mass-=R.boostCost*dt;
       if(m.rnd()<dt*8)m.food.push(spawnFood(m.rnd,0,0,0,
         s.x-Math.cos(s.ang)*radiusOf(s),s.y-Math.sin(s.ang)*radiusOf(s),.6));
     }
@@ -1000,16 +1113,33 @@ function tick(m,dt){
     const need=Math.max(4,(bodyLenOf(s)/R.pointGap)|0);
     if(s.path.length>need)s.path.length=need;
 
-    const r=radiusOf(s),eat=r+9;
-    for(const i of nearFood(m,s.x,s.y,eat)){
+    // ── Magnete: il cibo vicino viene attirato verso la testa ──
+    const r=radiusOf(s),eat=r+9,mag=s.mod.magnet+r;
+    for(const i of nearFood(m,s.x,s.y,mag)){
       const f=m.food[i];if(!f)continue;
-      const dx=f.x-s.x,dy=f.y-s.y;
-      if(dx*dx+dy*dy<eat*eat){s.mass+=f.m*s.mod.growth;m.food[i]=null}
+      const dx=s.x-f.x,dy=s.y-f.y,d2=dx*dx+dy*dy;
+      if(d2<eat*eat){s.mass+=f.m*s.mod.growth;m.food[i]=null;continue}
+      if(d2<mag*mag){
+        const d=Math.sqrt(d2)||1,pull=(1-d/mag)*300*dt;
+        f.x+=dx/d*pull; f.y+=dy/d*pull;
+      }
     }
 
     const dz=Math.hypot(s.x-m.cx,s.y-m.cy);
     s.outside=dz>m.zone;
-    if(s.outside)s.mass-=R.zoneDps*dt*(1+(dz-m.zone)/400);
+    if(s.outside)s.mass-=R.zoneDps*dt*(1+(dz-m.zone)/400)/s.mod.zoneRes;
+
+    // ── Bozzolo: rigenera solo se nessuno è vicino ──
+    if(s.mod.regen>0){
+      let solo=true;
+      for(const o of m.snakes){
+        if(o===s||!o.alive)continue;
+        if((o.x-s.x)**2+(o.y-s.y)**2<300*300){solo=false;break}
+      }
+      s.calm=solo?s.calm+dt:0;
+      if(s.calm>2&&!s.outside)s.mass+=s.mod.regen*dt;
+    }
+
     if(s.mass>s.maxMass)s.maxMass=s.mass;
     if(s.mass<R.minMass)kill(m,s,null);
   }
@@ -1058,6 +1188,10 @@ function collide(m){
 function kill(m,s,by){
   if(!s.alive)return;
   s.alive=false; s.placement=m.alive; m.alive--;
+  s.killedBy=by?by.name:(s.outside?'zona':'zona');
+  m.feed.push({t:m.t,by:by?by.name:'ZONA',who:s.name,me:by&&by.id===0,mine:s.id===0});
+  if(m.feed.length>6)m.feed.shift();
+  if(by&&by.id===0)m.flash=.45;
   const drop=s.mass*R.dropRatio,per=Math.max(1.2,drop/Math.max(6,s.path.length/3));
   for(let k=0;k<s.path.length;k+=3){
     const p=s.path[k];
@@ -1069,8 +1203,9 @@ function kill(m,s,by){
 
 function botThink(m,s){
   const dz=Math.hypot(s.x-m.cx,s.y-m.cy);
+  const canB=!s.lock&&s.energy>35;      // i bot tengono da parte l'energia
   let ang=s.ang;
-  if(dz>m.zone-70)return{ang:Math.atan2(m.cy-s.y,m.cx-s.x),boost:dz>m.zone};
+  if(dz>m.zone-70)return{ang:Math.atan2(m.cy-s.y,m.cx-s.x),boost:dz>m.zone&&canB};
   const r=radiusOf(s),look=r+58+s.mass*.22;
   let danger=0,escape=0;
   for(const off of [-.5,0,.5]){
@@ -1086,7 +1221,7 @@ function botThink(m,s){
       }
     }
   }
-  if(danger>0)return{ang:s.ang+escape*1.15,boost:danger>1.6};
+  if(danger>0)return{ang:s.ang+escape*1.15,boost:danger>1.6&&canB};
   if(m.rnd()<.02)s.target=null;
   if(m.t>R.grace&&s.aggr>.55&&!s.target){
     let best=null,bd=1e9;
@@ -1100,7 +1235,7 @@ function botThink(m,s){
     if(best){
       const lead=Math.min(1.6,bd/180);
       const tx=best.x+Math.cos(best.ang)*R.speed*lead,ty=best.y+Math.sin(best.ang)*R.speed*lead;
-      return{ang:Math.atan2(ty-s.y,tx-s.x),boost:bd<200&&s.mass>18};
+      return{ang:Math.atan2(ty-s.y,tx-s.x),boost:bd<200&&s.mass>18&&canB};
     }
   }
   let bf=null,bd=1e9;
@@ -1128,7 +1263,7 @@ function finalize(m){
   if(me.alive)me.placement=1;
   return {seed:m.seed,ticks:m.tickN,dur:m.t,
     parts:m.snakes.map(s=>({id:s.id,place:s.placement||1,kills:s.kills,
-      mass:Math.round(s.maxMass)})),
+      mass:Math.round(s.maxMass),by:s.killedBy})),
     hash:stateHash(m)};
 }
 
@@ -1261,6 +1396,13 @@ function draw(m){
     ctx.beginPath();ctx.moveTo(64,0);ctx.lineTo(46,-11);ctx.lineTo(46,11);ctx.closePath();
     ctx.fillStyle='rgba(239,90,90,.85)';ctx.fill();ctx.restore();
   }
+
+  // Lampo verde quando elimini qualcuno: il colpo va sentito
+  if(m.flash>0){
+    ctx.fillStyle='rgba(45,212,191,'+(m.flash*.32).toFixed(3)+')';
+    ctx.fillRect(0,0,W,H);
+    m.flash=Math.max(0,m.flash-.03);
+  }
 }
 
 /* ── Anteprima NFT su canvas ─────────────────────────────── */
@@ -1307,6 +1449,7 @@ function nftArt(el,defId){
    ═══════════════════════════════════════════════════════════════ */
 let M=null,MODE='free',running=false,last=0,accum=0,hudT=0;
 let ptr={x:0,y:0,on:false},boostKey=false,keys={};
+const bt=$('#hBoost');
 // Joystick virtuale (solo touch): conta il TRASCINAMENTO dal punto d'appoggio,
 // non la posizione assoluta del dito. Un tocco fermo non sterza: niente scatti
 // al primo tocco, e il pollice può stare comodo ovunque sullo schermo.
@@ -1319,17 +1462,28 @@ cv.addEventListener('pointermove',e=>{
   if(isTouch){if(joy.on){joy.x=e.clientX;joy.y=e.clientY}return}
   ptr.x=e.clientX;ptr.y=e.clientY;ptr.on=true;
 });
+let lastTap=0;
 cv.addEventListener('pointerdown',e=>{
-  if(isTouch){joy.on=true;joy.sx=joy.x=e.clientX;joy.sy=joy.y=e.clientY;return}
+  if(isTouch){
+    joy.on=true;joy.sx=joy.x=e.clientX;joy.sy=joy.y=e.clientY;
+    // Doppio tocco = boost, senza staccare il pollice dalla guida
+    const t=performance.now();
+    if(t-lastTap<300){boostKey=true;bt.classList.add('on')}
+    lastTap=t;
+    return;
+  }
   ptr.x=e.clientX;ptr.y=e.clientY;ptr.on=true;
   if(e.button===0)boostKey=true;
 });
-addEventListener('pointerup',()=>{if(isTouch){joy.on=false}else{boostKey=false}});
-addEventListener('pointercancel',()=>{joy.on=false});
+addEventListener('pointerup',()=>{
+  if(isTouch){joy.on=false;boostKey=false;bt.classList.remove('on')}
+  else boostKey=false;
+});
+addEventListener('pointercancel',()=>{joy.on=false;boostKey=false});
 addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Space'){boostKey=true;e.preventDefault()}});
 addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')boostKey=false});
-const bt=$('#hBoost');
-bt.addEventListener('pointerdown',e=>{e.preventDefault();boostKey=true;bt.classList.add('on')});
+bt.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();
+  boostKey=true;bt.classList.add('on')});
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>
   bt.addEventListener(ev,()=>{boostKey=false;bt.classList.remove('on')}));
 
@@ -1362,7 +1516,7 @@ function frame(ts){
   accum+=dt;
   let g=0;
   while(accum>=R.tick&&g++<6&&!M.finished){
-    step(M,readAng(),boostKey&&M.snakes[0].mass>R.minMass+2);
+    step(M,readAng(),boostKey);   // l'energia decide da sola se il boost parte
     accum-=R.tick;
   }
   draw(M);
@@ -1371,16 +1525,69 @@ function frame(ts){
 }
 requestAnimationFrame(frame);
 
+const mapCv=$('#hMap'), mapCtx=mapCv.getContext('2d');
+function drawMap(){
+  const me=M.snakes[0];
+  const S=88, dp=Math.min(devicePixelRatio||1,2);
+  if(mapCv.width!==S*dp){mapCv.width=S*dp;mapCv.height=S*dp}
+  const g=mapCtx; g.setTransform(dp,0,0,dp,0,0);
+  g.clearRect(0,0,S,S);
+  const sc=S/R.world, cx=S/2, cy=S/2;
+  // zona sicura
+  g.beginPath();g.arc(cx,cy,M.zone*sc,0,7);
+  g.fillStyle='rgba(45,212,191,.09)';g.fill();
+  g.strokeStyle='rgba(239,90,90,.6)';g.lineWidth=1.4;g.stroke();
+  const pt=o=>[o.x*sc,o.y*sc];
+  if(me.mod.radar){
+    for(const o of M.snakes){
+      if(!o.alive||o.id===0)continue;
+      const [x,y]=pt(o);
+      g.beginPath();g.arc(x,y,2,0,7);
+      g.fillStyle=o.mass>me.mass?'rgba(239,90,90,.9)':'rgba(232,238,247,.55)';g.fill();
+    }
+  } else {
+    for(const o of M.snakes){
+      if(!o.alive||o.id===0||!o.mod.visible)continue;
+      const [x,y]=pt(o);
+      g.beginPath();g.arc(x,y,2.2,0,7);g.fillStyle='rgba(239,90,90,.85)';g.fill();
+    }
+  }
+  const [px,py]=pt(me);
+  g.beginPath();g.arc(px,py,3.2,0,7);g.fillStyle='#2dd4bf';g.fill();
+  g.beginPath();g.arc(px,py,5.4,0,7);g.strokeStyle='rgba(45,212,191,.5)';g.lineWidth=1;g.stroke();
+}
+
 function hud(dt){
   const me=M.snakes[0];
   $('#hMass').textContent=Math.round(me.mass);
   $('#hKills').textContent=me.kills;
   $('#hAlive').textContent=M.alive;
   $('#hWarn').classList.toggle('on',!!me.outside);
-  hudT+=dt;if(hudT<.25)return;hudT=0;
+
+  const en=me.energy/R.enMax*100;
+  $('#hEn').style.width=en.toFixed(0)+'%';
+  $('#hEnWrap').classList.toggle('low',me.lock||en<25);
+  $('#hBoost').classList.toggle('on',me.boosting);
+
+  drawMap();
+
+  hudT+=dt;if(hudT<.2)return;hudT=0;
+
   const top=M.snakes.filter(s=>s.alive).sort((a,b)=>b.mass-a.mass).slice(0,5);
   $('#hBoard').innerHTML=top.map((s,i)=>
     '<div class="'+(s.id===0?'me':'')+'">'+(i+1)+'. '+s.name+' <b>'+Math.round(s.mass)+'</b></div>').join('');
+
+  const z=$('#hZone');
+  if(M.t<R.zoneDelay){
+    z.textContent='La zona si restringe fra '+Math.ceil(R.zoneDelay-M.t)+'s';
+    z.classList.remove('hot');
+  } else if(M.zone>R.zoneEnd+8){
+    z.textContent='⬤ ZONA IN CHIUSURA';z.classList.add('hot');
+  } else {z.textContent='⬤ ZONA MINIMA';z.classList.add('hot')}
+
+  const rec=M.feed.filter(f=>M.t-f.t<5);
+  $('#hFeed').innerHTML=rec.slice(-3).map(f=>
+    '<div>'+(f.me?'<b>TU</b>':f.by)+' → '+(f.mine?'<i>TU</i>':f.who)+'</div>').join('');
 }
 
 function startMatch(mode){
@@ -1389,18 +1596,10 @@ function startMatch(mode){
   const M0=MODES[mode];
   let usedTicket=false;
 
-  if(mode!=='free'){
-    if(chk.free&&mode==='t1'){
-      DB.tickets.left--; usedTicket=true;
-      // Il ticket è gratis per TE, non per il sistema: la quota la mette il
-      // protocollo dalla riserva. È un costo di acquisizione, e come tale
-      // deve comparire a bilancio invece di sparire.
-      post('ticket_sponsor',mode,[[ACC.resv,-M0.fee],[ACC.prize,M0.fee]]);
-    }
-    else{
-      post('match_entry',mode,[[ACC.pSnk,-M0.fee],[ACC.prize,M0.fee]]);
-      DB.stats.spent+=M0.fee;
-    }
+  if(M0.tk){ DB.tickets.left-=M0.tk; usedTicket=true; }
+  else if(M0.cur==='SNK'){
+    post('match_entry',mode,[[ACC.pSnk,-M0.fee],[ACC.prize,M0.fee]]);
+    DB.stats.spent+=M0.fee;
     // Le quote dei 9 avversari entrano nel montepremi
     post('match_entry_opp',mode,[[ACC.opp,-M0.fee*9],[ACC.prize,M0.fee*9]]);
   }
@@ -1408,8 +1607,9 @@ function startMatch(mode){
   MODE=mode;
   const lm=loadoutMods(isRanked(mode)?'ranked':'casual');
   const pm=baseMods();
-  for(const k of ['speed','radius','growth','startMass','leech','boostCost','boostMul'])pm[k]=lm[k];
-  pm.shield=lm.shield;pm.visible=lm.visible;pm.skin=lm.skin;pm.ability=lm.ability;
+  for(const k of ['speed','radius','growth','startMass','leech','boostCost','boostMul',
+    'enRegen','zoneRes','shield','visible','radar','magnet','regen'])pm[k]=lm[k];
+  pm.skin=lm.skin;pm.ability=lm.ability;
 
   const seed=(Math.random()*4294967295)>>>0;
   const mmr0=DB.player.mmr;              // l'MMR cambia a fine partita: il replay
@@ -1456,10 +1656,10 @@ function settle(){
   let mine=baseMine+bonus;
   let coinPay=0,burnRes=0,oppPay=0;
 
-  if(MODE==='free'){
+  if(M0.cur==='COINS'){
     mine=0;
-    coinPay=Math.round((160+me.kills*90+(11-me.place)*45));
-    post('match_reward_free',MODE,[[ACC.emis,-coinPay],[ACC.pCoin,coinPay]]);
+    coinPay=pay.place+pay.kills;
+    post('match_reward_coins',MODE,[[ACC.emis,-coinPay],[ACC.pCoin,coinPay]]);
   } else {
     const pool=M0.fee*10,rake=Math.round(pool*M0.rake),dist=pool-rake;
     // Quote degli avversari (nudo: i bot non hanno talismani)
@@ -1515,8 +1715,9 @@ function settle(){
   // Replay firmato
   const rep={id:uid('rep'),seed:M.seed,ticks:M.tickN,log:M.log,
     mods:{speed:lm.speed,radius:lm.radius,growth:lm.growth,startMass:lm.startMass,
-      leech:lm.leech,boostCost:lm.boostCost,boostMul:lm.boostMul,
-      shield:lm.shield,visible:lm.visible,skin:lm.skin},
+      leech:lm.leech,boostCost:lm.boostCost,boostMul:lm.boostMul,enRegen:lm.enRegen,
+      shield:lm.shield,visible:lm.visible,radar:lm.radar,magnet:lm.magnet,
+      regen:lm.regen,zoneRes:lm.zoneRes,skin:lm.skin},
     mmr:M.mmr0,hash:r.hash,mode:MODE,at:now()};
   DB.replays.unshift(rep); if(DB.replays.length>12)DB.replays.pop();
   DB.matches.unshift({at:now(),mode:MODE,place:me.place,kills:me.kills,
@@ -1533,8 +1734,8 @@ function settle(){
 
 function showResult(o){
   const {r,me,pay,mine,coinPay,burnRes,dim,xp,ups,M0,ticket,rep}=o;
-  const fee=MODE==='free'?0:(ticket?0:M0.fee);
-  const net=MODE==='free'?coinPay:mine-fee;
+  const fee=M0.cur==='COINS'?0:M0.fee;
+  const net=M0.cur==='COINS'?coinPay:mine-fee;
   const t=r.dur|0;
   const eco=M.eco;
   const bonus=eco&&(eco.earn||eco.killEarn||eco.placeEarn);
@@ -1542,7 +1743,10 @@ function showResult(o){
   $('#resIn').innerHTML=`
     <div class="rplace">
       <div class="n">${me.place}°</div>
-      <div class="l">${me.place===1?'VITTORIA — ultimo sopravvissuto':'posto su 10 · '+MODES[MODE].name}</div>
+      <div class="l">${me.place===1?'VITTORIA — ultimo sopravvissuto'
+        :'posto su 10 · '+MODES[MODE].name}</div>
+      ${me.place!==1&&me.by?`<div class="l" style="margin-top:6px;color:var(--dan)">
+        eliminato ${me.by==='zona'?'dalla zona':'da <b>'+me.by+'</b>'}</div>`:''}
     </div>
     <div class="rstats">
       <div class="rstat"><b>${me.kills}</b><small>Eliminazioni</small></div>
@@ -1550,11 +1754,15 @@ function showResult(o){
       <div class="rstat"><b>${(t/60|0)}:${String(t%60).padStart(2,'0')}</b><small>Durata</small></div>
     </div>
     <div class="card">
-      ${MODE==='free'?`
-        <div class="kv"><span>Premio partita</span><b class="pos">+${nf(coinPay)} ● Coins</b></div>
-        <div class="kv"><span>Modalità gratuita</span><b>nessun rischio</b></div>
+      ${MODES[MODE].cur==='COINS'?`
+        <div class="kv"><span>Ingresso</span><b>${ticket?'1 Ticket':'gratis'}</b></div>
+        <div class="kv"><span>Premio piazzamento</span><b class="pos">+${nf(pay.place)} ●</b></div>
+        <div class="kv"><span>Premio eliminazioni</span><b class="pos">+${nf(pay.kills)} ●</b></div>
+        <div class="kv" style="border-top:1px solid var(--line);margin-top:7px;padding-top:11px">
+          <span>Totale</span><b class="pos" style="font-size:18px">+${nf(coinPay)} ● Coins</b></div>
+        <div class="muted" style="margin-top:8px">I Coins non sono scambiabili: servono per i Ticket e le riparazioni.</div>
       `:`
-        <div class="kv"><span>Quota d'ingresso</span><b class="${fee?'neg':'pos'}">${fee?'−'+nf(fee):'GRATIS (ticket)'} ◈</b></div>
+        <div class="kv"><span>Quota d'ingresso</span><b class="neg">−${nf(fee)} ◈</b></div>
         <div class="kv"><span>Premio piazzamento</span><b class="pos">+${nf(pay.place)} ◈</b></div>
         <div class="kv"><span>Premio eliminazioni</span><b class="pos">+${nf(pay.kills)} ◈</b></div>
         ${bonus?`<div class="kv"><span>Bonus talismani</span><b class="pos">incluso sopra</b></div>`:''}
@@ -1602,21 +1810,24 @@ function renderPlay(){
   const tk=ticketsLeft();
   const modes=Object.values(MODES).map(m=>{
     const c=canPlay(m.key);
-    const free=c.free&&m.key==='t1';
-    return `<div class="card" style="${c.ok?'':'opacity:.5'}">
+    const cost=m.tk?'1 🎟':m.fee?nf(m.fee)+' ◈':'GRATIS';
+    const col=m.tk?'var(--gold)':m.fee?'var(--ac)':'var(--dim)';
+    return `<div class="card" style="${c.ok?'':'opacity:.55'}">
       <div class="row">
         <div class="grow">
-          <div style="font-size:15px;font-weight:700">${m.name}</div>
-          <div class="muted" style="margin-top:2px">${m.d}</div>
+          <div style="font-size:15px;font-weight:700">${m.name}
+            <span class="pill" style="background:${m.cur==='SNK'?'rgba(45,212,191,.14);color:var(--ac)'
+              :'rgba(245,196,81,.14);color:var(--gold)'}">${m.cur==='SNK'?'$SNK':'COINS'}</span></div>
+          <div class="muted" style="margin-top:3px">${m.d}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:13px;font-weight:800;color:${m.fee?'var(--ac)':'var(--gold)'}">
-            ${free?'TICKET':m.fee?nf(m.fee)+' ◈':'GRATIS'}</div>
+          <div style="font-size:13px;font-weight:800;color:${col}">${cost}</div>
           <button class="btn sm" style="margin-top:6px" ${c.ok?'':'disabled'}
             onclick="__app.play('${m.key}')">${c.ok?'GIOCA':'🔒'}</button>
         </div>
       </div>
-      ${c.ok?'':'<div class="muted" style="margin-top:7px;color:var(--dan)">'+c.why+'</div>'}
+      ${c.ok?'':'<div class="muted" style="margin-top:7px;color:var(--dan)">'+c.why
+        +(c.needTicket?' — <span style="color:var(--gold)">comprane uno qui sotto</span>':'')+'</div>'}
     </div>`;
   }).join('');
 
@@ -1646,6 +1857,27 @@ function renderPlay(){
           lm.killEarn?'+'+Math.round(lm.killEarn*100)+'% da kill':'',
           lm.placeEarn?'+'+Math.round(lm.placeEarn*100)+'% da podio':''].filter(Boolean).join(' · ')}</div>`:''}
     </div>
+    <h3>Ticket</h3>
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <div style="font-size:15px;font-weight:700">🎟 ${tk} Ticket</div>
+          <div class="muted" style="margin-top:3px">${TICKET_FREE} gratis ogni giorno.
+            Servono per l'Arena e si comprano <b style="color:var(--gold)">in Coins</b>,
+            mai in $SNK.</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:800;color:var(--gold)">${nf(ticketCost())} ●</div>
+          <button class="btn sm gold" style="margin-top:6px"
+            ${(DB.tickets.bought||0)>=TICKET_MAX?'disabled':''}
+            onclick="__app.buyTicket()">COMPRA</button>
+        </div>
+      </div>
+      <div class="muted" style="margin-top:8px">Ogni acquisto costa il 35% in più del
+        precedente, con un tetto di ${TICKET_MAX} al giorno: così nessun bot può
+        trasformare i Coins in una fabbrica di partite.</div>
+    </div>
+
     <h3>Modalità</h3>
     ${modes}
     ${DB.matches.length?`<h3>Ultime partite</h3>${DB.matches.slice(0,6).map(h=>`
@@ -1875,6 +2107,35 @@ function renderEco(){
       </div>
     </div>
 
+    <h3>Le due monete</h3>
+    <div class="card">
+      <div class="row" style="align-items:stretch;gap:9px">
+        <div class="grow" style="background:#0e141d;border-radius:10px;padding:11px">
+          <b style="color:var(--gold);font-size:13px">● Coins</b>
+          <div class="muted" style="margin-top:5px;line-height:1.6">
+            Si guadagnano giocando · rubinetto libero<br>
+            <b>Non scambiabili, nessun prezzo</b><br>
+            Servono per: Ticket, riparazioni</div>
+        </div>
+        <div class="grow" style="background:#0e141d;border-radius:10px;padding:11px">
+          <b style="color:var(--ac);font-size:13px">◈ $SNK</b>
+          <div class="muted" style="margin-top:5px;line-height:1.6">
+            Solo dagli altri giocatori · somma zero<br>
+            <b>Scambiabili on-chain</b><br>
+            Servono per: NFT, mercato, ranked</div>
+        </div>
+      </div>
+      <div class="card flat" style="margin:11px 0 0;text-align:center">
+        <div style="font-size:13px;font-weight:700;color:var(--ac)">◈ ⟶ ● senso unico</div>
+        <div class="muted" style="margin-top:5px">I $SNK possono diventare Coins bruciandosi.
+          I Coins <b>non tornano mai</b> $SNK. Senza questa regola un bot coltiverebbe
+          Coins gratis e li incasserebbe: è così che sono morti i play-to-earn
+          della generazione precedente.</div>
+      </div>
+      <div class="kv" style="margin-top:8px"><span>Coins assorbiti dai sink</span>
+        <b>${nf(bal(ACC.coinSink))} ●</b></div>
+    </div>
+
     <h3>Flussi cumulati</h3>
     <div class="card flat">
       ${bar('Coniati',DB.eco.minted,'var(--blu)')}
@@ -1969,6 +2230,18 @@ function openWallet(){
       <h3>Stake</h3>
       <button class="btn g wide" onclick="__app.stake(2000)">Metti in stake 2.000 ◈ (sblocca T3)</button>
     `:`<button class="btn wide" onclick="__app.connect()">COLLEGA WALLET TON</button>`}
+    <h3>Cambia $SNK in Coins</h3>
+    <div class="card flat">
+      <div class="muted" style="margin-bottom:9px">Senso unico: i $SNK si <b>bruciano</b>
+        e diventano Coins. Il percorso inverso non esiste, ed è la regola che tiene
+        in piedi tutta l'economia — se i Coins potessero tornare $SNK, un bot li
+        coltiverebbe gratis e li incasserebbe.</div>
+      <div class="row">
+        <button class="btn g sm grow" onclick="__app.conv(50)">50 ◈ → 2.250 ●</button>
+        <button class="btn g sm grow" onclick="__app.conv(200)">200 ◈ → 9.000 ●</button>
+      </div>
+    </div>
+
     <h3>Ricarica (simulata)</h3>
     <div class="row">
       <button class="btn g sm grow" onclick="__app.dep(500)">+500 ◈</button>
@@ -2114,6 +2387,7 @@ const app={
   invMode(m){invMode=m;renderInv()},
   mktTab(t){mktTab=t;renderMkt()},
   tapNft, nftDetail, openListing, sellDlg, craft, repair, bpClaim, buyBP,
+  buyTicket, conv:convertToCoins,
   claimQ:claimQuest, connect:connectWallet, openWallet,
   buy:buyListing, cancel:cancelListing,
   bid(lid){const v=+($('#bidAmt')||{}).value;placeBid(lid,v);closeModal()},
@@ -2154,6 +2428,7 @@ const app={
   _:{DB:()=>DB,getM:()=>M,post,ledgerOk,createMatch,tick,step,finalize,verifyReplay,
      stateHash,computePayout,loadoutMods,mint,DEFS,MODES,R,governor,startMatch,settle,
      tickMarket,craftables,repairCost,save,bal,ACC,genListing,equip,nftById,
+     buyTicket,convertToCoins,ticketCost,canPlay,
      genesis:()=>{genesis();refreshQuests();go('play')},
      stopLoop:()=>{running=false}}
 };
